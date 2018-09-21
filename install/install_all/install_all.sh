@@ -79,20 +79,20 @@ fi
 if [ "$OS_VERSION" == "8" ]
 then
     sudo apt-get install -y postgresql-server-dev-9.4 2> var/log/install_app.log 
-    sudo apt install postgis-2.3 postgis 2> var/log/install_app.log
+    sudo apt install -y postgis-2.3 postgis 2> var/log/install_app.log
 fi
 
 if [ "$OS_VERSION" == "18.04" ]
 then
     sudo apt-get install -y postgresql-server-dev-10 2> var/log/install_app.log 
-    sudo apt install postgis 2> var/log/install_app.log
+    sudo apt install -y postgis 2> var/log/install_app.log
 fi
 
 if [ "$OS_VERSION" == "16.04" ]
 then
-    sudo apt-get install libatlas3-base
+    sudo apt-get install -y libatlas3-base
     sudo apt-get install -y postgresql-server-dev-9.5  2> var/log/install_app.log 
-    sudo apt install postgis postgis postgresql-9.5-postgis-2.2 2> var/log/install_app.log
+    sudo apt install -y postgis postgis postgresql-9.5-postgis-2.2 2> var/log/install_app.log
 fi
 
 sudo apt-get install -y python3 2> var/log/install_app.log 
