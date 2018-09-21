@@ -12,7 +12,7 @@ fi
 
 
 # Check os and versions
-if [ "$OS_NAME" != "debian" ] || [ "$OS_NAME" != "ubuntu" ] 
+if [ "$OS_NAME" != "debian" ] && [ "$OS_NAME" != "ubuntu" ] 
 then
     echo -e "\e[91m\e[1mLe script d'installation n'est prévu que pour les distributions Debian et Ubuntu\e[0m" >&2
     exit 1
