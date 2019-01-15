@@ -198,15 +198,32 @@ export class DataFormService {
         queryString = queryString.set(key, params[key]);
       }
     }
-    return this._http.get<any>(`${AppConfig.API_ENDPOINT}/users/roles`, { params: queryString } );
+    return this._http.get<any>(`${AppConfig.API_ENDPOINT}/users/roles`, { params: queryString });
   }
 
   getDataset(id) {
     return this._http.get<any>(`${AppConfig.API_ENDPOINT}/meta/dataset/${id}`);
   }
 
-  getModulesList() {
-    return this._http.get<any>(`${AppConfig.API_ENDPOINT}/gn_commons/modules`);
+  getModulesList(exclude: Array<string>) {
+    let queryString: HttpParams = new HttpParams();
+    exclude.forEach(mod_code => {
+      queryString = queryString.append('exclude', mod_code);
+    });
+    return this._http.get<any>(`${AppConfig.API_ENDPOINT}/gn_commons/modules`, {
+      params: queryString
+    });
   }
 
+  getCruved(modules_code?: Array<string>) {
+    let queryString: HttpParams = new HttpParams();
+    if (modules_code) {
+      modules_code.forEach(mod_code => {
+        queryString = queryString.append('module_code', mod_code);
+      });
+    }
+    return this._http.get<any>(`${AppConfig.API_ENDPOINT}/permissions/cruved`, {
+      params: queryString
+    });
+  }
 }

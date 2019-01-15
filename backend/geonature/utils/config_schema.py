@@ -81,8 +81,8 @@ class GnPySchemaConf(Schema):
     SQLALCHEMY_TRACK_MODIFICATIONS = fields.Boolean(missing=False)
     SESSION_TYPE = fields.String(missing='filesystem')
     SECRET_KEY = fields.String(required=True)
-    # le cookie expire toute les 30 minutes par défaut
-    COOKIE_EXPIRATION = fields.Integer(missing=1800)
+    # le cookie expire toute les 7 jours par défaut
+    COOKIE_EXPIRATION = fields.Integer(missing=3600 * 24 * 7)
     COOKIE_AUTORENEW = fields.Boolean(missing=True)
     TRAP_ALL_EXCEPTIONS = fields.Boolean(missing=False)
 
@@ -114,9 +114,11 @@ class Synthese(Schema):
     LIST_COLUMNS_FRONTEND = fields.List(fields.Dict, missing=DEFAULT_LIST_COLUMN)
     EXPORT_COLUMNS = fields.Dict(missing=DEFAULT_EXPORT_COLUMNS)
     EXPORT_FORMAT = fields.List(fields.String(), missing=['csv', 'geojson', 'shapefile'])
+    # Nombre de résultat à afficher pour la rechercher autocompleté de taxon
+    TAXON_RESULT_NUMBER = fields.Integer(missing=20)
     # Liste des id attributs Taxhub à afficher sur la fiche détaile de la synthese
     # et sur les filtres taxonomiques avancés
-    ID_ATTRIBUT_TAXHUB = fields.List(fields.Integer(), missing=[1, 2])
+    ID_ATTRIBUT_TAXHUB = fields.List(fields.Integer(), missing=[101, 102])
     # nom des colonnes de la table gn_synthese.synthese que l'on veux retirer des filres dynamiques
     # et de la modale d'information détaillée d'une observation
     # example = "[non_digital_proof]"
@@ -148,8 +150,6 @@ class GnGeneralSchemaConf(Schema):
         validate=OneOf(['hash', 'md5'])
     )
     DEBUG = fields.Boolean(missing=False)
-    # period d'inactivité en second après laquelle on deconnect: defaut 20 secondes
-    INACTIVITY_PERIOD_DISCONECT = fields.Integer(missing=cookie_expiration, default=1200)
     URL_APPLICATION = fields.Url(required=True)
     API_ENDPOINT = fields.Url(required=True)
     API_TAXHUB = fields.Url(required=True)
@@ -165,20 +165,11 @@ class GnGeneralSchemaConf(Schema):
     ENABLE_NOMENCLATURE_TAXONOMIC_FILTERS = fields.Boolean(missing=True)
     BDD = fields.Nested(BddConfig, missing=dict())
 
-    @validates_schema
-    def validate_inactivity_seconde(self, data):
-        if data['INACTIVITY_PERIOD_DISCONECT'] + 20 <= cookie_expiration:
-            raise ValidationError(
-                """
-                Parameters INACTIVITY_PERIOD_DISCONECT must be at least 20 seconds
-                lesser than COOKIE_EXPIRATION
-                """
-            )
 
 
 class ManifestSchemaConf(Schema):
     package_format_version = fields.String(required=True)
-    module_name = fields.String(required=True)
+    module_code = fields.String(required=True)
     module_version = fields.String(required=True)
     min_geonature_version = fields.String(required=True)
     max_geonature_version = fields.String(required=True)
@@ -186,5 +177,4 @@ class ManifestSchemaConf(Schema):
 
 
 class ManifestSchemaProdConf(Schema):
-    # module_path = fields.String(required=True)
-    module_name = fields.String(required=True)
+    module_code = fields.String(required=True)

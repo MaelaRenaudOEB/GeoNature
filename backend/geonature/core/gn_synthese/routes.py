@@ -31,7 +31,7 @@ from geonature.core.gn_synthese.utils import query as synthese_query
 
 from geonature.core.gn_meta.models import TDatasets
 
-from pypnusershub import routes as fnauth
+from geonature.core.gn_permissions import decorators as permissions
 
 from geonature.utils.utilssqlalchemy import (
     to_csv_resp, to_json_resp,
@@ -46,17 +46,6 @@ routes = Blueprint('gn_synthese', __name__)
 
 # get the root logger
 log = logging.getLogger()
-
-
-@routes.route('/list/sources', methods=['GET'])
-@json_resp
-def get_sources_list():
-    q = DB.session.query(TSources)
-    data = q.all()
-
-    return [
-        d.as_dict(columns=('id_source', 'desc_source')) for d in data
-    ]
 
 
 @routes.route('/sources', methods=['GET'])
@@ -81,19 +70,19 @@ def getDefaultsNomenclatures():
         regne = params['regne']
     if 'organism' in params:
         organism = params['organism']
-    types = request.args.getlist('id_type')
+    types = request.args.getlist('mnemonique_type')
 
     q = DB.session.query(
-        distinct(DefaultsNomenclaturesValue.id_type),
+        distinct(DefaultsNomenclaturesValue.mnemonique_type),
         func.gn_synthese.get_default_nomenclature_value(
-            DefaultsNomenclaturesValue.id_type,
+            DefaultsNomenclaturesValue.mnemonique_type,
             organism,
             regne,
             group2_inpn
         )
     )
     if len(types) > 0:
-        q = q.filter(DefaultsNomenclaturesValue.id_type.in_(tuple(types)))
+        q = q.filter(DefaultsNomenclaturesValue.mnemonique_type.in_(tuple(types)))
     try:
         data = q.all()
     except Exception:
@@ -105,14 +94,14 @@ def getDefaultsNomenclatures():
 
 
 @routes.route('', methods=['GET'])
-@fnauth.check_auth_cruved('R', True)
+@permissions.check_cruved_scope('R', True, module_code='SYNTHESE')
 @json_resp
 def get_synthese(info_role):
     """
         return synthese row(s) filtered by form params
         Params must have same synthese fields names
     """
-    filters = {key: value[0].split(',') for key, value in dict(request.args).items()}
+    filters = dict(request.args)
     if 'limit' in filters:
         result_limit = filters.pop('limit')[0]
     else:
@@ -162,40 +151,9 @@ def get_one_synthese(id_synthese):
         return None
 
 
-@routes.route('/<id_synthese>', methods=['DELETE'])
-@fnauth.check_auth_cruved('D', True)
-@json_resp
-def delete_synthese(info_role, id_synthese):
-    synthese_obs = DB.session.query(Synthese).get(id_synthese)
-    user_datasets = TDatasets.get_user_datasets(info_role)
-    synthese_releve = synthese_obs.get_observation_if_allowed(info_role, user_datasets)
-
-    # get and delete source
-    # TODO
-    # est-ce qu'on peut supprimer les données historiques depuis la synthese
-    source = DB.session.query(TSources).filter(TSources.id_source == synthese_obs.id_source).one()
-    pk_field_source = source.entity_source_pk_field
-    inter = pk_field_source.split('.')
-    pk_field = inter.pop()
-    table_source = inter.join('.')
-    sql = text("DELETE FROM {table} WHERE {pk_field} = :id".format(
-        table=table_source,
-        pk_field=pk_field)
-    )
-    result = DB.engine.execute(
-        sql,
-        id=synthese_obs.entity_source_pk_value
-    )
-
-    # delete synthese obs
-    DB.session.delete(synthese_releve)
-    DB.session.commit()
-
-    return {'message': 'delete with success'}, 200
-
 
 @routes.route('/export', methods=['GET'])
-@fnauth.check_auth_cruved('E', True)
+@permissions.check_cruved_scope('E', True, module_code='SYNTHESE')
 def export(info_role):
     filters = dict(request.args)
     if 'limit' in filters:
@@ -263,7 +221,7 @@ def export(info_role):
 
 
 @routes.route('/statuts', methods=['GET'])
-@fnauth.check_auth_cruved('E', True)
+@permissions.check_cruved_scope('E', True, module_code='SYNTHESE')
 def get_status(info_role):
     """
     Route to get all the protection status of a synthese search
@@ -329,14 +287,29 @@ def get_taxon_tree():
 @routes.route('/taxons_autocomplete', methods=['GET'])
 @json_resp
 def get_autocomplete_taxons_synthese():
+    """
+        Route utilisée pour les autocompletes de la synthese (basé
+        sur tous les taxon présent dans la synthese)
+        La requête SQL utilise l'algorithme 
+        des trigrames pour améliorer la pertinence des résultats
 
-    search_name = request.args.get('search_name')
-    q = DB.session.query(VMTaxonsSyntheseAutocomplete)
-    if search_name:
-        search_name = search_name.replace(' ', '%')
-        q = q.filter(
-            VMTaxonsSyntheseAutocomplete.search_name.ilike(search_name+"%")
-        )
+        params GET:
+            - search_name : nom recherché. Recherche basé sur la fonction
+                ilike de sql avec un remplacement des espaces par %
+            - regne : filtre sur le regne INPN
+            - group2_inpn : filtre sur le groupe 2 de l'INPN
+    """
+    search_name = request.args.get('search_name', '')
+    q = DB.session.query(
+        VMTaxonsSyntheseAutocomplete,
+        func.similarity(
+            VMTaxonsSyntheseAutocomplete.search_name, search_name
+        ).label('idx_trgm')
+    )
+    search_name = search_name.replace(' ', '%')
+    q = q.filter(
+        VMTaxonsSyntheseAutocomplete.search_name.ilike('%'+search_name+"%")
+    )
     regne = request.args.get('regne')
     if regne:
         q = q.filter(VMTaxonsSyntheseAutocomplete.regne == regne)
@@ -349,6 +322,6 @@ def get_autocomplete_taxons_synthese():
         VMTaxonsSyntheseAutocomplete.cd_nom ==
         VMTaxonsSyntheseAutocomplete.cd_ref
     ))
-
-    data = q.limit(20).all()
-    return [d.as_dict() for d in data]
+    limit = request.args.get('limit', 20)
+    data = q.order_by(desc('idx_trgm')).limit(20).all()
+    return [d[0].as_dict() for d in data]

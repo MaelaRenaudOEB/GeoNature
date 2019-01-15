@@ -46,56 +46,90 @@ SELECT pg_catalog.setval('gn_meta.cor_dataset_actor_id_cda_seq', (SELECT max(id_
 
 -- Utilisateurs
 UPDATE utilisateurs.t_roles SET pass_plus = '$2y$13$TMuRXgvIg6/aAez0lXLLFu0lyPk4m8N55NDhvLoUHh/Ar3rFzjFT.' WHERE id_role IN (2,3);
+
+-- Ajout d'un utiliseur 'socle 1' avec l'id 10
+DELETE FROM utilisateurs.t_roles WHERE id_role=10;
+INSERT INTO utilisateurs.t_roles(id_role, groupe, nom_role) VALUES
+(10, TRUE, 'groupe_socle_1');
+
+-- ajout d'un utilisateur pour le test des permissions
+DELETE FROM utilisateurs.t_roles WHERE id_role=15;
+INSERT INTO utilisateurs.t_roles(id_role, groupe, nom_role) VALUES
+(15, FALSE, 'test_gn_permissions');
+
+-- Ajout des utilisateurs agent et admin
+INSERT INTO utilisateurs.cor_role_app_profil VALUES
+  (1,3,6),
+  (2,3,6),
+  (3,3,6)
+;
 -- Ajout d'un utilisateurs partenaire avec comme cruved R=1
-INSERT INTO utilisateurs.cor_app_privileges(id_tag_action, id_tag_object, id_application, id_role) VALUES
-(12,21,3,3);
+
 
 -- Reset original privileges
-INSERT INTO utilisateurs.cor_app_privileges (id_tag_action, id_tag_object, id_application, id_role) VALUES
---Administrateur sur UsersHub et TaxHub / Non utilisé
-(6,23,1,1)
-,(6,23,2,1)
---- Groupe administrateur sur UsersHub et TaxHub / Non utilisé
-,(6,23,1,9)
-,(6,23,2,9)
---Administrateur sur GeoNature
-,(11, 23, 3, 1)
-,(12, 23, 3, 1)
-,(13, 23, 3, 1)
-,(14, 23, 3, 1)
-,(15, 23, 3, 1)
-,(16, 23, 3, 1)
---- Groupe administrateur sur GeoNature
-,(11, 23, 3, 9)
-,(12, 23, 3, 9)
-,(13, 23, 3, 9)
-,(14, 23, 3, 9)
-,(15, 23, 3, 9)
-,(16, 23, 3, 9)
---Validateur général sur tout GeoNature
-,(14, 23, 3, 5)
---Validateur pour son organisme sur Occtax
---,(14, 22, 4, 4) -- Droits Occtax supprimés car c'est l'installation du module qui créé l'application
---CRUVED du groupe en poste sur tout GeoNature
-,(11, 23, 3, 7)
-,(12, 22, 3, 7)
-,(13, 21, 3, 7)
-,(15, 22, 3, 7)
-,(16, 21, 3, 7)
---Groupe bureau d''étude socle 2 sur tout GeoNature
-,(11, 23, 3, 6)
-,(12, 22, 3, 6)
-,(13, 21, 3, 6)
-,(15, 22, 3, 6)
-,(16, 21, 3, 6)
---Groupe bureau d''étude socle 1 sur tout GeoNature
-,(11, 23, 3, 8)
-,(12, 21, 3, 8)
-,(13, 21, 3, 8)
-,(15, 21, 3, 8)
-,(16, 21, 3, 8)
+INSERT INTO gn_permissions.cor_role_action_filter_module_object
+    (
+    id_role,
+    id_action,
+    id_filter,
+    id_module,
+    id_object
+    )
+VALUES
+    -- Groupe Admin
+    (9, 1, 4, 0, 1),
+    (9, 2, 4, 0, 1),
+    (9, 3, 4, 0, 1),
+    (9, 4, 4, 0, 1),
+    (9, 5, 4, 0, 1),
+    (9, 6, 4, 0, 1),
+    --Validateur général sur tout GeoNature
+    (5, 4, 4, 0, 1 ),
+    --CRUVED du groupe en poste (id=7) sur tout GeoNature 
+    (7, 1, 4, 0, 1),
+    (7, 2, 3, 0, 1),
+    (7, 3, 2, 0, 1),
+    (7, 4, 1, 0, 1),
+    (7, 5, 3, 0, 1),
+    (7, 6, 2, 0, 1),
+    -- Groupe en poste, n'a pas accès à l'admin
+    (7, 1, 1, 1, 1),
+    (7, 2, 1, 1, 1),
+    (7, 3, 1, 1, 1),
+    (7, 4, 1, 1, 1),
+    (7, 5, 1, 1, 1),
+    (7, 6, 1, 1, 1),
+    -- Groupe en admin a tous les droits sur l'admin
+    (9, 1, 4, 1, 1),
+    (9, 2, 4, 1, 1),
+    (9, 3, 4, 1, 1),
+    (9, 4, 4, 1, 1),
+    (9, 5, 4, 1, 1),
+    (9, 6, 4, 1, 1),
+    -- Groupe ADMIN peut gérer les permissions depuis le backoffice
+    (9, 1, 4, 1, 3),
+    (9, 2, 4, 1, 3),
+    (9, 3, 4, 1, 3),
+    (9, 4, 4, 1, 3),
+    (9, 5, 4, 1, 3),
+    (9, 6, 4, 1, 3),
+    -- Groupe ADMIN peut gérer les métadonnées depuis le backoffice
+    (9, 1, 4, 1, 2),
+    (9, 2, 4, 1, 2),
+    (9, 3, 4, 1, 2),
+    (9, 4, 4, 1, 2),
+    (9, 5, 4, 1, 2),
+    (9, 6, 4, 1, 2),
+    -- Groupe ADMIN peut gérer les nomenclatures depuis le backoffice
+    (9, 1, 4, 1, 4),
+    (9, 2, 4, 1, 4),
+    (9, 3, 4, 1, 4),
+    (9, 4, 4, 1, 4),
+    (9, 5, 4, 1, 4),
+    (9, 6, 4, 1, 4),
+    -- partenaire peut lire sur geonature
+    (3, 2, 2, 0, 1);
 ;
-
 
 INSERT INTO gn_meta.cor_dataset_territory (id_dataset, id_nomenclature_territory, territory_desc) VALUES
 (1, ref_nomenclatures.get_id_nomenclature('TERRITOIRE', 'METROP') ,'Territoire du parc national des Ecrins et de ses environs immédiats')
@@ -171,8 +205,8 @@ VALUES
     ref_nomenclatures.get_id_nomenclature('DEE_FLOU', 'NON'),
     'Gil D',
     ref_nomenclatures.get_id_nomenclature('METH_DETERMIN', '2'),
-    351,
-    'Grenouille rousse',
+    713776,
+    'Trichopria Ashmead, 1893',
     'Taxref V9.0',
     '',
     '',
@@ -273,3 +307,11 @@ INSERT INTO  pr_occtax.cor_counting_occtax (
 
 
 SELECT pg_catalog.setval('pr_occtax.cor_counting_occtax_id_counting_occtax_seq', (SELECT max(id_counting_occtax)+1 FROM pr_occtax.cor_counting_occtax), true);
+
+
+
+-- Pour la synthese
+
+-- insertion d'un attribut sur taxon pour test de la recherche par attrs
+
+INSERT INTO taxonomie.cor_taxon_attribut VALUES (102, 'eau', 209902);

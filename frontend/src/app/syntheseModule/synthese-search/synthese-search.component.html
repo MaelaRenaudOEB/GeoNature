@@ -4,7 +4,7 @@
       <fieldset class="absolute">
         <legend> Quoi ?</legend>
         <pnx-taxonomy label="{{'Taxon.Taxon' | translate }} " [parentFormControl]="formService.searchForm.controls.cd_nom"
-          [idList]="500" [charNumber]="3" [listLength]="20" [apiEndPoint]="taxonApiEndPoint" (onChange)=formService.getCurrentTaxon($event)>
+          [idList]="500" [charNumber]="3" [listLength]="AppConfig.SYNTHESE.TAXON_RESULT_NUMBER" [apiEndPoint]="taxonApiEndPoint" (onChange)=formService.getCurrentTaxon($event)>
         </pnx-taxonomy>
         <div class="alert alert-warning taxon-alert" *ngIf="formService.selectedtaxonFromComponent.length > 0">
           <p class="taxon-list">
@@ -79,7 +79,6 @@
 
       <fieldset>
         <legend> Ou ?</legend>
-        <!-- <pnx-municipalities label="Communes" [searchBar]="true" [parentFormControl]="formService.searchForm.controls.municipalities"></pnx-municipalities> -->
 
         <div *ngIf="formService.formBuilded">
           <div *ngFor="let area of AppConfig.SYNTHESE.AREA_FILTERS; let i = index;">
@@ -133,8 +132,5 @@
     </div>
 
   </div>
-
-  <!-- {{formService.searchForm.value | json}} -->
-
 
 </div>

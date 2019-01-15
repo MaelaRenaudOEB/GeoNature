@@ -1,18 +1,9 @@
 import { Component, OnInit, Output, EventEmitter, ViewChild } from '@angular/core';
-import { FormBuilder } from '@angular/forms';
 import { DataService } from '../services/data.service';
 import { SyntheseFormService } from '../services/form.service';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { AppConfig } from '@geonature_config/app.config';
 import { MapService } from '@geonature_common/map/map.service';
-import {
-  TreeComponent,
-  TreeModel,
-  TreeNode,
-  TREE_ACTIONS,
-  IActionMapping,
-  ITreeOptions
-} from 'angular-tree-component';
 import { TaxonAdvancedModalComponent } from './taxon-advanced/taxon-advanced.component';
 import { TaxonAdvancedStoreService } from './taxon-advanced/taxon-advanced-store.service';
 
@@ -53,7 +44,8 @@ export class SyntheseSearchComponent implements OnInit {
     this._storeService.taxonTreeState = {};
 
     // remove layers draw in the map
-    this.mapService.removeAllLayers(this.mapService.map, this.mapService.releveFeatureGroup);
+    this.mapService.removeAllLayers(this.mapService.map, this.mapService.leafletDrawFeatureGroup);
+    this.mapService.removeAllLayers(this.mapService.map, this.mapService.fileLayerFeatureGroup);
   }
 
   openModal() {

@@ -1,7 +1,15 @@
 #!/bin/bash
+currentdir=${PWD##*/}
+parentdir="$(dirname "$(pwd)")"
+
+if [ $currentdir != 'install' ]
+then
+    echo 'Please run the script from the install directory'
+    exit
+fi
 
 cd ../
-# Make sure only root can run our script
+# Make sure root cannot run our script
 if [ "$(id -u)" == "0" ]; then
    echo "This script must NOT be run as root" 1>&2
    exit 1
@@ -9,28 +17,29 @@ fi
 
 . config/settings.ini
 
-if [ ! -d '/tmp/geonature/' ]
+if [ ! -d 'tmp' ]
 then
-  mkdir /tmp/geonature
-  chmod -R 775 /tmp/geonature
+  mkdir tmp
 fi
 
-if [ ! -d '/tmp/taxhub/' ]
+if [ ! -d 'tmp/geonature/' ]
 then
-  mkdir /tmp/taxhub
-  chmod -R 775 /tmp/taxhub
+  mkdir tmp/geonature
 fi
 
-if [ ! -d '/tmp/nomenclatures/' ]
+if [ ! -d 'tmp/taxhub/' ]
 then
-  mkdir /tmp/nomenclatures
-  chmod -R 775 /tmp/nomenclatures
+  mkdir tmp/taxhub
 fi
 
-if [ ! -d '/tmp/usershub/' ]
+if [ ! -d 'tmp/nomenclatures/' ]
 then
-  mkdir /tmp/usershub
-  chmod -R 775 /tmp/usershub
+  mkdir tmp/nomenclatures
+fi
+
+if [ ! -d 'tmp/usershub/' ]
+then
+  mkdir tmp/usershub
 fi
 
 if [ ! -d 'var' ]
@@ -93,15 +102,15 @@ then
 
     # Mise en place de la structure de la base et des données permettant son fonctionnement avec l'application
     echo "GRANT..."
-    cp data/grant.sql /tmp/geonature/grant.sql
-    sudo sed -i "s/MYPGUSER/$user_pg/g" /tmp/geonature/grant.sql
+    cp data/grant.sql tmp/geonature/grant.sql
+    sudo sed -i "s/MYPGUSER/$user_pg/g" tmp/geonature/grant.sql
     echo "" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "GRANT" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    sudo -n -u postgres -s psql -d $db_name -f /tmp/geonature/grant.sql &>> var/log/install_db.log
+    sudo -n -u postgres -s psql -d $db_name -f tmp/geonature/grant.sql &>> var/log/install_db.log
 
     echo "Creating 'public' functions..."
     echo "" &>> var/log/install_db.log
@@ -112,38 +121,62 @@ then
     echo "" &>> var/log/install_db.log
     export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f data/core/public.sql  &>> var/log/install_db.log
 
-    echo "Getting and creating USERS schema (utilisateurs)..."
-    echo "" &>> var/log/install_db.log
-    echo "" &>> var/log/install_db.log
-    echo "--------------------" &>> var/log/install_db.log
-    echo "Creating USERS schema (utilisateurs)" &>> var/log/install_db.log
-    echo "--------------------" &>> var/log/install_db.log
-    echo "" &>> var/log/install_db.log
-    wget https://raw.githubusercontent.com/PnEcrins/UsersHub/$usershub_release/data/usershub.sql -P /tmp/usershub
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/usershub/usershub.sql  &>> var/log/install_db.log
-
+    if $install_usershub_schema
+     then
+        echo "Getting and creating USERS schema (utilisateurs)..."
+        echo "" &>> var/log/install_db.log
+        echo "" &>> var/log/install_db.log
+        echo "--------------------" &>> var/log/install_db.log
+        echo "Creating USERS schema (utilisateurs)" &>> var/log/install_db.log
+        echo "--------------------" &>> var/log/install_db.log
+        echo "" &>> var/log/install_db.log
+        wget https://raw.githubusercontent.com/PnEcrins/UsersHub/$usershub_release/data/usershub.sql -P tmp/usershub
+        export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/usershub/usershub.sql  &>> var/log/install_db.log
+        
+        echo "--------------------" &>> var/log/install_db.log
+        echo "Insert minimal data (utilisateurs)" &>> var/log/install_db.log
+        echo "--------------------" &>> var/log/install_db.log
+        wget https://raw.githubusercontent.com/PnEcrins/UsersHub/$usershub_release/data/usershub-data.sql -P tmp/usershub
+        wget https://raw.githubusercontent.com/PnEcrins/UsersHub/$usershub_release/data/usershub-dataset.sql -P tmp/usershub
+        wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/adds_for_usershub.sql -P tmp/taxhub
+        export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/usershub/usershub-data.sql  &>> var/log/install_db.log
+        export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/usershub/usershub-dataset.sql  &>> var/log/install_db.log
+        echo "Insertion of data for usershub..."
+        echo "" &>> var/log/install_db.log
+        echo "" &>> var/log/install_db.log
+        echo "--------------------" &>> var/log/install_db.log
+        # fisrt insert taxhub data for usershub
+        export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/taxhub/adds_for_usershub.sql  &>> var/log/install_db.log
+        # insert geonature data for usershub
+        export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f data/utilisateurs/adds_for_usershub.sql  &>> var/log/install_db.log
+        
+    fi
 
     echo "Download and extract taxref file..."
 
-    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/inpn/data_inpn_taxhub.sql -P /tmp/taxhub
+    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/inpn/data_inpn_taxhub.sql -P tmp/taxhub
+
+    # sed to replace /tmp/taxhub to ~/<geonature_dir>/tmp.taxhub
+    sed -i 's#'/tmp/taxhub'#'$parentdir/tmp/taxhub'#g' tmp/taxhub/data_inpn_taxhub.sql
+    
 
     array=( TAXREF_INPN_v11.zip ESPECES_REGLEMENTEES_v11.zip LR_FRANCE_20160000.zip )
     for i in "${array[@]}"
     do
-      if [ ! -f '/tmp/taxhub/'$i ]
+      if [ ! -f 'tmp/taxhub/'$i ]
       then
-          wget http://geonature.fr/data/inpn/taxonomie/$i -P /tmp/taxhub
+          wget http://geonature.fr/data/inpn/taxonomie/$i -P tmp/taxhub
       else
           echo $i exists
       fi
-      unzip /tmp/taxhub/$i -d /tmp/taxhub
+      unzip tmp/taxhub/$i -d tmp/taxhub
     done
 
     echo "Getting 'taxonomie' schema creation scripts..."
-    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/taxhubdb.sql -P /tmp/taxhub
-    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/taxhubdata.sql -P /tmp/taxhub
-    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/taxhubdata_atlas.sql -P /tmp/taxhub
-    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/materialized_views.sql -P /tmp/taxhub
+    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/taxhubdb.sql -P tmp/taxhub
+    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/taxhubdata.sql -P tmp/taxhub
+    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/taxhubdata_atlas.sql -P tmp/taxhub
+    wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/materialized_views.sql -P tmp/taxhub
 
     echo "Creating 'taxonomie' schema..."
     echo "" &>> var/log/install_db.log
@@ -152,7 +185,7 @@ then
     echo "Creating 'taxonomie' schema" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/taxhub/taxhubdb.sql  &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/taxhub/taxhubdb.sql  &>> var/log/install_db.log
 
     echo "Inserting INPN taxonomic data... (This may take a few minutes)"
     echo "" &>> var/log/install_db.log
@@ -161,7 +194,7 @@ then
     echo "Inserting INPN taxonomic data" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    sudo -n -u postgres -s psql -d $db_name -f /tmp/taxhub/data_inpn_taxhub.sql &>> var/log/install_db.log
+    sudo -n -u postgres -s psql -d $db_name -f tmp/taxhub/data_inpn_taxhub.sql &>> var/log/install_db.log
 
     echo "Creating dictionaries data for taxonomic schema..."
     echo "" &>> var/log/install_db.log
@@ -170,7 +203,7 @@ then
     echo "Creating dictionaries data for taxonomic schema" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/taxhub/taxhubdata.sql  &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/taxhub/taxhubdata.sql  &>> var/log/install_db.log
 
     echo "Inserting sample dataset  - atlas attributes..."
     echo "" &>> var/log/install_db.log
@@ -179,7 +212,7 @@ then
     echo "Inserting sample dataset  - atlas attributes" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/taxhub/taxhubdata_atlas.sql  &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/taxhub/taxhubdata_atlas.sql  &>> var/log/install_db.log
 
     echo "Creating a view that represent the taxonomic hierarchy..."
     echo "" &>> var/log/install_db.log
@@ -188,13 +221,14 @@ then
     echo "Creating a view that represent the taxonomic hierarchy" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/taxhub/materialized_views.sql  &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/taxhub/materialized_views.sql  &>> var/log/install_db.log
+
 
     echo "Getting 'nomenclature' schema creation scripts..."
-    wget https://raw.githubusercontent.com/PnX-SI/Nomenclature-api-module/$nomenclature_release/data/nomenclatures.sql -P /tmp/nomenclatures
-    wget https://raw.githubusercontent.com/PnX-SI/Nomenclature-api-module/$nomenclature_release/data/data_nomenclatures.sql -P /tmp/nomenclatures
-    wget https://raw.githubusercontent.com/PnX-SI/Nomenclature-api-module/$nomenclature_release/data/nomenclatures_taxonomie.sql -P /tmp/nomenclatures
-    wget https://raw.githubusercontent.com/PnX-SI/Nomenclature-api-module/$nomenclature_release/data/data_nomenclatures_taxonomie.sql -P /tmp/nomenclatures
+    wget https://raw.githubusercontent.com/PnX-SI/Nomenclature-api-module/$nomenclature_release/data/nomenclatures.sql -P tmp/nomenclatures
+    wget https://raw.githubusercontent.com/PnX-SI/Nomenclature-api-module/$nomenclature_release/data/data_nomenclatures.sql -P tmp/nomenclatures
+    wget https://raw.githubusercontent.com/PnX-SI/Nomenclature-api-module/$nomenclature_release/data/nomenclatures_taxonomie.sql -P tmp/nomenclatures
+    wget https://raw.githubusercontent.com/PnX-SI/Nomenclature-api-module/$nomenclature_release/data/data_nomenclatures_taxonomie.sql -P tmp/nomenclatures
 
     echo "Creating 'nomenclatures' schema..."
     echo "" &>> var/log/install_db.log
@@ -203,8 +237,8 @@ then
     echo "Creating 'nomenclatures' schema" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/nomenclatures/nomenclatures.sql  &>> var/log/install_db.log
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/nomenclatures/nomenclatures_taxonomie.sql  &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/nomenclatures/nomenclatures.sql  &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/nomenclatures/nomenclatures_taxonomie.sql  &>> var/log/install_db.log
 
     echo "Inserting 'nomenclatures' data..."
     echo "" &>> var/log/install_db.log
@@ -213,9 +247,9 @@ then
     echo "Inserting 'nomenclatures' data" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    sudo sed -i "s/MYDEFAULTLANGUAGE/$default_language/g" /tmp/nomenclatures/data_nomenclatures.sql
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/nomenclatures/data_nomenclatures.sql  &>> var/log/install_db.log
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/nomenclatures/data_nomenclatures_taxonomie.sql  &>> var/log/install_db.log
+    sudo sed -i "s/MYDEFAULTLANGUAGE/$default_language/g" tmp/nomenclatures/data_nomenclatures.sql
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/nomenclatures/data_nomenclatures.sql  &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/nomenclatures/data_nomenclatures_taxonomie.sql  &>> var/log/install_db.log
 
     echo "Creating 'commons' schema..."
     echo "" &>> var/log/install_db.log
@@ -242,9 +276,9 @@ then
     echo "Creating 'ref_geo' schema..." &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    cp data/core/ref_geo.sql /tmp/geonature/ref_geo.sql
-    sudo sed -i "s/MYLOCALSRID/$srid_local/g" /tmp/geonature/ref_geo.sql
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/geonature/ref_geo.sql  &>> var/log/install_db.log
+    cp data/core/ref_geo.sql tmp/geonature/ref_geo.sql
+    sudo sed -i "s/MYLOCALSRID/$srid_local/g" tmp/geonature/ref_geo.sql
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/geonature/ref_geo.sql  &>> var/log/install_db.log
 
     if $install_sig_layers
     then
@@ -255,14 +289,14 @@ then
         echo "Insert default French municipalities (IGN admin-express)" &>> var/log/install_db.log
         echo "--------------------" &>> var/log/install_db.log
         echo "" &>> var/log/install_db.log
-        if [ ! -f '/tmp/geonature/communes_fr_admin_express_2017-06.zip' ]
+        if [ ! -f 'tmp/geonature/communes_fr_admin_express_2017-06.zip' ]
         then
-            wget  --cache=off http://geonature.fr/data/ign/communes_fr_admin_express_2017-06.zip -P /tmp/geonature
+            wget  --cache=off http://geonature.fr/data/ign/communes_fr_admin_express_2017-06.zip -P tmp/geonature
         else
-            echo "/tmp/geonature/communes_fr_admin_express_2017-06.zip already exist"
+            echo "tmp/geonature/communes_fr_admin_express_2017-06.zip already exist"
         fi
-        unzip /tmp/geonature/communes_fr_admin_express_2017-06.zip -d /tmp/geonature
-        sudo -n -u postgres -s psql -d $db_name -f /tmp/geonature/fr_municipalities.sql &>> var/log/install_db.log
+        unzip tmp/geonature/communes_fr_admin_express_2017-06.zip -d tmp/geonature
+        sudo -n -u postgres -s psql -d $db_name -f tmp/geonature/fr_municipalities.sql &>> var/log/install_db.log
         echo "" &>> var/log/install_db.log
         echo "Restore $user_pg owner" &>> var/log/install_db.log
         echo "--------------------" &>> var/log/install_db.log
@@ -286,15 +320,15 @@ then
         echo "Insert default French DEM (IGN 250m BD alti)" &>> var/log/install_db.log
         echo "--------------------" &>> var/log/install_db.log
         echo "" &>> var/log/install_db.log
-        if [ ! -f '/tmp/geonature/BDALTIV2_2-0_250M_ASC_LAMB93-IGN69_FRANCE_2017-06-21.zip' ]
+        if [ ! -f 'tmp/geonature/BDALTIV2_2-0_250M_ASC_LAMB93-IGN69_FRANCE_2017-06-21.zip' ]
         then
-            wget --cache=off http://geonature.fr/data/ign/BDALTIV2_2-0_250M_ASC_LAMB93-IGN69_FRANCE_2017-06-21.zip -P /tmp/geonature
+            wget --cache=off http://geonature.fr/data/ign/BDALTIV2_2-0_250M_ASC_LAMB93-IGN69_FRANCE_2017-06-21.zip -P tmp/geonature
         else
-            echo "/tmp/geonature/BDALTIV2_2-0_250M_ASC_LAMB93-IGN69_FRANCE_2017-06-21.zip already exist"
+            echo "tmp/geonature/BDALTIV2_2-0_250M_ASC_LAMB93-IGN69_FRANCE_2017-06-21.zip already exist"
         fi
-	      unzip /tmp/geonature/BDALTIV2_2-0_250M_ASC_LAMB93-IGN69_FRANCE_2017-06-21.zip -d /tmp/geonature
-        #gdalwarp -t_srs EPSG:$srid_local /tmp/geonature/BDALTIV2_250M_FXX_0098_7150_MNT_LAMB93_IGN69.asc /tmp/geonature/dem.tif &>> var/log/install_db.log
-        export PGPASSWORD=$user_pg_pass;raster2pgsql -s $srid_local -c -C -I -M -d -t 5x5 /tmp/geonature/BDALTIV2_250M_FXX_0098_7150_MNT_LAMB93_IGN69.asc ref_geo.dem|psql -h $db_host -U $user_pg -d $db_name  &>> var/log/install_db.log
+	      unzip tmp/geonature/BDALTIV2_2-0_250M_ASC_LAMB93-IGN69_FRANCE_2017-06-21.zip -d tmp/geonature
+        #gdalwarp -t_srs EPSG:$srid_local tmp/geonature/BDALTIV2_250M_FXX_0098_7150_MNT_LAMB93_IGN69.asc tmp/geonature/dem.tif &>> var/log/install_db.log
+        export PGPASSWORD=$user_pg_pass;raster2pgsql -s $srid_local -c -C -I -M -d -t 5x5 tmp/geonature/BDALTIV2_250M_FXX_0098_7150_MNT_LAMB93_IGN69.asc ref_geo.dem|psql -h $db_host -U $user_pg -d $db_name  &>> var/log/install_db.log
     	#echo "Refresh DEM spatial index. This may take a few minutes..."
         sudo -n -u postgres -s psql -d $db_name -c "REINDEX INDEX ref_geo.dem_st_convexhull_idx;" &>> var/log/install_db.log
         if $vectorise_dem 
@@ -336,9 +370,9 @@ then
     echo "Creating 'synthese' schema" &>> var/log/install_db.log
     echo "--------------------" &>> var/log/install_db.log
     echo "" &>> var/log/install_db.log
-    cp data/core/synthese.sql /tmp/geonature/synthese.sql
-    sudo sed -i "s/MYLOCALSRID/$srid_local/g" /tmp/geonature/synthese.sql
-    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/geonature/synthese.sql  &>> var/log/install_db.log
+    cp data/core/synthese.sql tmp/geonature/synthese.sql
+    sudo sed -i "s/MYLOCALSRID/$srid_local/g" tmp/geonature/synthese.sql
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/geonature/synthese.sql  &>> var/log/install_db.log
     export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f data/core/synthese_default_values.sql  &>> var/log/install_db.log
 
     echo "Creating 'exports' schema..."
@@ -360,14 +394,21 @@ then
     echo "" &>> var/log/install_db.log
     export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f data/core/monitoring.sql  &>> var/log/install_db.log
 
-    # Suppression des fichiers : on ne conserve que les fichiers compressés
-    echo "Cleaning files..."
-    sudo rm /tmp/geonature/*.sql
-    sudo rm /tmp/usershub/*.sql
-    sudo rm /tmp/taxhub/*.txt
-    sudo rm /tmp/taxhub/*.sql
-    sudo rm /tmp/taxhub/*.csv
-    sudo rm /tmp/nomenclatures/*.sql
+    echo "Creating 'permissions' schema"
+    echo "" &>> var/log/install_db.log
+    echo "" &>> var/log/install_db.log
+    echo "--------------------" &>> var/log/install_db.log
+    echo "Creating 'permissions' schema" &>> var/log/install_db.log
+    echo "--------------------" &>> var/log/install_db.log
+    echo "" &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f data/core/permissions.sql  &>> var/log/install_db.log
+    echo "" &>> var/log/install_db.log
+    echo "" &>> var/log/install_db.log
+    echo "--------------------" &>> var/log/install_db.log
+    echo "Insert 'permissions' data" &>> var/log/install_db.log
+    echo "--------------------" &>> var/log/install_db.log
+    export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f data/core/permissions_data.sql  &>> var/log/install_db.log
+
 
     #Installation des données exemples
     if $add_sample_data
@@ -396,13 +437,24 @@ then
         echo "Inserting sample dataset of taxons for taxonomic schema" &>> var/log/install_db.log
         echo "--------------------" &>> var/log/install_db.log
         echo "" &>> var/log/install_db.log
-        wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/taxhubdata_taxons_example.sql -P /tmp/taxhub
-        export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f /tmp/taxhub/taxhubdata_taxons_example.sql  &>> var/log/install_db.log
+        wget https://raw.githubusercontent.com/PnX-SI/TaxHub/$taxhub_release/data/taxhubdata_taxons_example.sql -P tmp/taxhub
+        export PGPASSWORD=$user_pg_pass;psql -h $db_host -U $user_pg -d $db_name -f tmp/taxhub/taxhubdata_taxons_example.sql  &>> var/log/install_db.log
+
+    
     fi
 
     if $install_default_dem
     then
-        sudo rm /tmp/geonature/BDALTIV2_250M_FXX_0098_7150_MNT_LAMB93_IGN69.asc
-        sudo rm /tmp/geonature/IGNF_BDALTIr_2-0_ASC_250M_LAMB93_IGN69_FRANCE.html
+        sudo rm tmp/geonature/BDALTIV2_250M_FXX_0098_7150_MNT_LAMB93_IGN69.asc
+        sudo rm tmp/geonature/IGNF_BDALTIr_2-0_ASC_250M_LAMB93_IGN69_FRANCE.html
     fi
 fi
+
+# Suppression des fichiers : on ne conserve que les fichiers compressés
+echo "Cleaning files..."
+rm tmp/geonature/*.sql
+rm tmp/usershub/*.sql
+rm tmp/taxhub/*.txt
+rm tmp/taxhub/*.sql
+rm tmp/taxhub/*.csv
+rm tmp/nomenclatures/*.sql

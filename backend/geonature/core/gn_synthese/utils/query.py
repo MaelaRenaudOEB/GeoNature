@@ -18,7 +18,7 @@ def filter_query_with_cruved(model, q, user, allowed_datasets):
     """
     Filter the query with the cruved authorization of a user
     """
-    if user.tag_object_code in ('1', '2'):
+    if user.value_filter in ('1', '2'):
         q = q.outerjoin(CorObserverSynthese, CorObserverSynthese.id_synthese == model.id_synthese)
         ors_filters = [
             CorObserverSynthese.id_role == user.id_role,
@@ -30,9 +30,9 @@ def filter_query_with_cruved(model, q, user, allowed_datasets):
             ors_filters.append(model.observers.ilike(user_fullname1))
             ors_filters.append(model.observers.ilike(user_fullname2))
 
-        if user.tag_object_code == '1':
+        if user.value_filter == '1':
             q = q.filter(or_(*ors_filters))
-        elif user.tag_object_code == '2':
+        elif user.value_filter == '2':
             ors_filters.append(
                 model.id_dataset.in_(allowed_datasets)
             )
@@ -69,7 +69,7 @@ def filter_taxonomy(model, q, filters):
             TaxrefLR.id_categorie_france.in_(filters.pop('taxonomy_lr'))
         ).subquery('sub_query_lr')
         # est-ce qu'il faut pas filtrer sur le cd_ ref ?
-        # quid des protection définit à rand superieur de la saisie ?
+        # quid des protection définit à rang superieur de la saisie ?
         q = q.filter(model.cd_nom.in_(sub_query_lr))
 
     aliased_cor_taxon_attr = {}
@@ -108,17 +108,6 @@ def filter_query_all_filters(model, q, filters, user, allowed_datasets):
         - allowed datasets (List<int>): an array of ID dataset where the users have autorization
 
     """
-
-    # from geonature.core.users.models import UserRigth
-
-    # user = UserRigth(
-    #     id_role=user.id_role,
-    #     tag_object_code='3',
-    #     tag_action_code="R",
-    #     id_organisme=user.id_organisme,
-    #     nom_role='Administrateur',
-    #     prenom_role='test'
-    # )
     q = filter_query_with_cruved(model, q, user, allowed_datasets)
 
     if 'observers' in filters:
@@ -137,23 +126,20 @@ def filter_query_all_filters(model, q, filters, user, allowed_datasets):
         )
         q = q.filter(TAcquisitionFramework.id_acquisition_framework.in_(filters.pop('id_acquisition_frameworks')))
 
-    if 'municipalities' in filters:
-        q = q.filter(
-            model.id_municipality.in_(
-                [com for com in filters['municipalities']]
-            )
-        )
-        filters.pop('municipalities')
-
     if 'geoIntersection' in filters:
         # Insersect with the geom send from the map
-        geom_wkt = loads(request.args['geoIntersection'])
-        # if the geom is a circle
-        if 'radius' in filters:
-            radius = filters.pop('radius')[0]
-            geom_wkt = circle_from_point(geom_wkt, float(radius))
-        geom_wkb = from_shape(geom_wkt, srid=4326)
-        q = q.filter(model.the_geom_4326.ST_Intersects(geom_wkb))
+        ors = []
+        for str_wkt in filters['geoIntersection']:
+            # if the geom is a circle
+            if 'radius' in filters:
+                radius = filters.pop('radius')[0]
+                wkt = circle_from_point(wkt, float(radius))
+            else:
+                wkt = loads(str_wkt)
+            geom_wkb = from_shape(wkt, srid=4326)
+            ors.append(model.the_geom_4326.ST_Intersects(geom_wkb))
+
+        q = q.filter(or_(*ors))
         filters.pop('geoIntersection')
 
     if 'period_start' in filters and 'period_end' in filters:
